@@ -115,8 +115,11 @@ export function htmlSerializeIfNeeded(model: EditorModel, {forceHTML = false} = 
 
     const parser = new Markdown(md);
     if (!parser.isPlainText() || forceHTML) {
+        let html = parser
+            .toHTML()
+            .replace(/<img\s+src="emoji-hack-fixme:([^"]+)"\s+alt="([^"]+)"/gi, '<img data-mx-emoticon="" src="$1" alt="$2" title="$2" height="32" vertical-align="middle"');
         // feed Markdown output to HTML parser
-        const phtml = cheerio.load(parser.toHTML(), {
+        const phtml = cheerio.load(html, {
             // @ts-ignore: The `_useHtmlParser2` internal option is the
             // simplest way to both parse and render using `htmlparser2`.
             _useHtmlParser2: true,

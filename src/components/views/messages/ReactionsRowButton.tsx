@@ -25,6 +25,7 @@ import { replaceableComponent } from "../../../utils/replaceableComponent";
 import ReactionsRowButtonTooltip from "./ReactionsRowButtonTooltip";
 import AccessibleButton from "../elements/AccessibleButton";
 import MatrixClientContext from "../../../contexts/MatrixClientContext";
+import {MatrixClientPeg} from '../../../MatrixClientPeg';
 
 interface IProps {
     // The event we're displaying reactions for
@@ -88,12 +89,24 @@ export default class ReactionsRowButton extends React.PureComponent<IProps, ISta
     }
 
     render() {
-        const { mxEvent, content, count, reactionEvents, myReactionEvent } = this.props;
+        const { mxEvent, count, reactionEvents, myReactionEvent } = this.props;
+        let content = this.props.content;
 
         const classes = classNames({
             mx_ReactionsRowButton: true,
             mx_ReactionsRowButton_selected: !!myReactionEvent,
         });
+
+        let image;
+        if(content.startsWith('mxc://')) {
+            let spl = content.indexOf('#');
+            if(spl != -1) {
+                image = content.substr(0, spl);
+                content = content.substr(spl + 1);
+            } else {
+                image = content;
+            }
+        }
 
         let tooltip;
         if (this.state.tooltipRendered) {
@@ -133,6 +146,10 @@ export default class ReactionsRowButton extends React.PureComponent<IProps, ISta
             );
         }
         const isPeeking = room.getMyMembership() !== "join";
+        let display: any = content;
+        if(image) {
+            display = <img src={MatrixClientPeg.get().mxcUrlToHttp(image, 200, 18, 'scale')} height={18} />;
+        }
         return <AccessibleButton
             className={classes}
             aria-label={label}
@@ -142,7 +159,7 @@ export default class ReactionsRowButton extends React.PureComponent<IProps, ISta
             onMouseLeave={this.onMouseLeave}
         >
             <span className="mx_ReactionsRowButton_content" aria-hidden="true">
-                {content}
+                {display}
             </span>
             <span className="mx_ReactionsRowButton_count" aria-hidden="true">
                 {count}

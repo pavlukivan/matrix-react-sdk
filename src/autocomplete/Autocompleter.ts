@@ -19,6 +19,7 @@ import {ReactElement} from 'react';
 import Room from 'matrix-js-sdk/src/models/room';
 import CommandProvider from './CommandProvider';
 import CommunityProvider from './CommunityProvider';
+import CustomEmojiProvider from './CustomEmojiProvider';
 import DuckDuckGoProvider from './DuckDuckGoProvider';
 import RoomProvider from './RoomProvider';
 import UserProvider from './UserProvider';
@@ -52,6 +53,7 @@ const PROVIDERS = [
     UserProvider,
     RoomProvider,
     EmojiProvider,
+    CustomEmojiProvider,
     NotifProvider,
     CommandProvider,
     CommunityProvider,
