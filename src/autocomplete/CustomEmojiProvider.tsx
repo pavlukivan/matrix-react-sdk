@@ -52,7 +52,6 @@ function score(query, space) {
 
 export default class EmojiProvider extends AutocompleteProvider {
     matcher: QueryMatcher<ICustomEmojiShort>;
-    nameMatcher: QueryMatcher<ICustomEmojiShort>;
 
     constructor() {
         super(CUSTOM_EMOJI_REGEX);
@@ -88,9 +87,6 @@ export default class EmojiProvider extends AutocompleteProvider {
         if (command) {
             const matchedString = command[0];
             completions = this.matcher.match(matchedString, limit);
-
-            // Do second match with shouldMatchWordsOnly in order to match against 'name'
-            completions = completions.concat(this.nameMatcher.match(matchedString));
 
             const sorters = [];
 
