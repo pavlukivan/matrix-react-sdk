@@ -31,7 +31,6 @@ $activeBorderColor: $secondary-fg-color;
     // Create another flexbox so the Panel fills the container
     display: flex;
     flex-direction: column;
-    overflow-y: auto;
 
     .mx_SpacePanel_spaceTreeWrapper {
         flex: 1;
@@ -67,6 +66,12 @@ $activeBorderColor: $secondary-fg-color;
 
     .mx_SpaceButton_toggleCollapse {
         cursor: pointer;
+    }
+
+    .mx_SpaceItem_dragging {
+        .mx_SpaceButton_toggleCollapse {
+            visibility: hidden;
+        }
     }
 
     .mx_SpaceTreeLevel {
@@ -292,7 +297,7 @@ $activeBorderColor: $secondary-fg-color;
         .mx_SpaceButton:hover,
         .mx_SpaceButton:focus-within,
         .mx_SpaceButton_hasMenuOpen {
-            &:not(.mx_SpaceButton_home):not(.mx_SpaceButton_invite) {
+            &:not(.mx_SpaceButton_invite) {
                 // Hide the badge container on hover because it'll be a menu button
                 .mx_SpacePanel_badgeContainer {
                     width: 0;
@@ -362,6 +367,14 @@ $activeBorderColor: $secondary-fg-color;
 
     .mx_SpacePanel_iconExplore::before {
         mask-image: url('$(res)/img/element-icons/roomlist/browse.svg');
+    }
+
+    .mx_SpacePanel_noIcon {
+        display: none;
+
+        & + .mx_IconizedContextMenu_label {
+            padding-left: 5px !important; // override default iconized label style to align with header
+        }
     }
 }
 
