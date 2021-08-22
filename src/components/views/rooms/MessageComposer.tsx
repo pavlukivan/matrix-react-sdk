@@ -40,11 +40,13 @@ import Tooltip, { Alignment } from "../elements/Tooltip";
 import ResizeNotifier from "../../../utils/ResizeNotifier";
 import { E2EStatus } from '../../../utils/ShieldUtils';
 import SendMessageComposer from "./SendMessageComposer";
+import { createMessageContent } from "./SendMessageComposer";
 import { ComposerInsertPayload } from "../../../dispatcher/payloads/ComposerInsertPayload";
 import { Action } from "../../../dispatcher/actions";
 import EditorModel from "../../../editor/model";
 import EmojiPicker from '../emojipicker/EmojiPicker';
 import MemberStatusMessageAvatar from "../avatars/MemberStatusMessageAvatar";
+import PreviewBody from "../messages/PreviewBody";
 
 interface IComposerAvatarProps {
     me: object;
@@ -188,6 +190,7 @@ interface IProps {
 
 interface IState {
     tombstone: MatrixEvent;
+    event?: MatrixEvent;
     canSendMessages: boolean;
     isComposerEmpty: boolean;
     haveRecording: boolean;
@@ -207,6 +210,7 @@ export default class MessageComposer extends React.Component<IProps, IState> {
 
         this.state = {
             tombstone: this.getRoomTombstone(),
+            event: null,
             canSendMessages: this.props.room.maySendMessage(),
             isComposerEmpty: true,
             haveRecording: false,
@@ -336,8 +340,20 @@ export default class MessageComposer extends React.Component<IProps, IState> {
     };
 
     private onChange = (model: EditorModel) => {
+        let room = this.props.room;
+        let event;
+        if (!model.isEmpty) {
+            let content = createMessageContent(model, this.props.permalinkCreator, this.props.replyToEvent);
+            event = new MatrixEvent({
+                room_id: room.roomId,
+                content,
+                type: "m.room.message",
+            });
+        }
+        
         this.setState({
             isComposerEmpty: model.isEmpty,
+            event: model.isEmpty ? null : event,
         });
     };
 
@@ -450,11 +466,26 @@ export default class MessageComposer extends React.Component<IProps, IState> {
             />;
         }
 
+        let preview;
+        if (this.state.event) {
+            preview = <PreviewBody
+                mxEvent={this.state.event}
+                highlights={[]}
+                highlightLink={""}
+                onHeightChanged={() => {}}
+                tileShape={null}
+                onMessageAllowed={() => {}}
+                permalinkCreator={this.props.permalinkCreator}
+                mediaEventHelper={null}
+            />;
+        }
+
         return (
             <div className="mx_MessageComposer mx_GroupLayout">
                 { recordingTooltip }
                 <div className="mx_MessageComposer_wrapper">
                     <ReplyPreview permalinkCreator={this.props.permalinkCreator} />
+                    { preview }
                     <div className="mx_MessageComposer_row">
                         { controls }
                     </div>

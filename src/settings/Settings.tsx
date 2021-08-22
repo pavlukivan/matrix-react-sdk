@@ -249,6 +249,12 @@ export const SETTINGS: {[setting: string]: ISetting} = {
         supportedLevels: LEVELS_FEATURE,
         default: false,
     },
+    "feature_compact_theme": {
+        isFeature: true,
+        displayName: "Use a compact room list view (might break some stuff)",
+        supportedLevels: LEVELS_FEATURE,
+        default: false,
+    },
     "feature_roomlist_preview_reactions_dms": {
         isFeature: true,
         displayName: _td("Show message previews for reactions in DMs"),

@@ -25,7 +25,6 @@ import {PillCompletion} from './Components';
 import {ICompletion, ISelectionRange} from './Autocompleter';
 import {uniq, sortBy} from 'lodash';
 import SettingsStore from "../settings/SettingsStore";
-import { shortcodeToUnicode } from '../HtmlUtils';
 import { EMOJI, IEmoji } from '../emoji';
 import { MatrixClientPeg } from '../MatrixClientPeg';
 
@@ -55,7 +54,7 @@ export default class EmojiProvider extends AutocompleteProvider {
 
     constructor() {
         super(CUSTOM_EMOJI_REGEX);
-        let emojis = MatrixClientPeg.get().getAccountData('im.ponies.user_emotes');
+        let emojis: any = MatrixClientPeg.get().getAccountData('im.ponies.user_emotes');
         if(emojis && emojis.event) emojis = emojis.event;
         if (emojis && emojis.content && emojis.content.emoticons) emojis = emojis.content.emoticons;
         else emojis = {};
@@ -119,7 +118,7 @@ export default class EmojiProvider extends AutocompleteProvider {
     }
 
     getName() {
-        return _t('Custom Emoji');
+        return 'Custom Emoji';
     }
 
     renderCompletions(completions: React.ReactNode[]): React.ReactNode {
@@ -127,7 +126,7 @@ export default class EmojiProvider extends AutocompleteProvider {
             <div
                 className="mx_Autocomplete_Completion_container_pill"
                 role="listbox"
-                aria-label={_t("Custom Emoji Autocomplete")}
+                aria-label="Custom Emoji Autocomplete"
             >
                 { completions }
             </div>
