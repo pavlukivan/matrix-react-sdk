@@ -103,16 +103,22 @@ export default class VideoFeed extends React.PureComponent<IProps, IState> {
         if (oldFeed) {
             this.props.feed.removeListener(CallFeedEvent.NewStream, this.onNewStream);
             this.props.feed.removeListener(CallFeedEvent.MuteStateChanged, this.onMuteStateChanged);
+            if (this.props.feed.purpose === SDPStreamMetadataPurpose.Usermedia) {
+                this.props.feed.measureVolumeActivity(false);
+            }
             this.stopMedia();
         }
         if (newFeed) {
             this.props.feed.addListener(CallFeedEvent.NewStream, this.onNewStream);
             this.props.feed.addListener(CallFeedEvent.MuteStateChanged, this.onMuteStateChanged);
+            if (this.props.feed.purpose === SDPStreamMetadataPurpose.Usermedia) {
+                this.props.feed.measureVolumeActivity(true);
+            }
             this.playMedia();
         }
     }
 
-    private playMedia() {
+    private async playMedia() {
         const element = this.element;
         if (!element) return;
         // We play audio in AudioFeed, not here
@@ -129,7 +135,7 @@ export default class VideoFeed extends React.PureComponent<IProps, IState> {
             // should serialise the ones that need to be serialised but then be able to interrupt
             // them with another load() which will cancel the pending one, but since we don't call
             // load() explicitly, it shouldn't be a problem. - Dave
-            element.play();
+            await element.play();
         } catch (e) {
             logger.info("Failed to play media element with feed", this.props.feed, e);
         }
@@ -180,7 +186,11 @@ export default class VideoFeed extends React.PureComponent<IProps, IState> {
         });
 
         let micIcon;
-        if (feed.purpose !== SDPStreamMetadataPurpose.Screenshare && !pipMode) {
+        if (
+            feed.purpose !== SDPStreamMetadataPurpose.Screenshare &&
+            !primary &&
+            !pipMode
+        ) {
             micIcon = (
                 <div className={micIconClasses} />
             );

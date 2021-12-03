@@ -21,7 +21,6 @@ import { Room } from 'matrix-js-sdk/src/models/room';
 import CommandProvider from './CommandProvider';
 import CommunityProvider from './CommunityProvider';
 import CustomEmojiProvider from './CustomEmojiProvider';
-import DuckDuckGoProvider from './DuckDuckGoProvider';
 import RoomProvider from './RoomProvider';
 import UserProvider from './UserProvider';
 import EmojiProvider from './EmojiProvider';
@@ -29,7 +28,7 @@ import NotifProvider from './NotifProvider';
 import { timeout } from "../utils/promise";
 import AutocompleteProvider, { ICommand } from "./AutocompleteProvider";
 import SpaceProvider from "./SpaceProvider";
-import SpaceStore from "../stores/SpaceStore";
+import SpaceStore from "../stores/spaces/SpaceStore";
 
 export interface ISelectionRange {
     beginning?: boolean; // whether the selection is in the first block of the editor or not
@@ -57,7 +56,6 @@ const PROVIDERS = [
     CustomEmojiProvider,
     NotifProvider,
     CommandProvider,
-    DuckDuckGoProvider,
 ];
 
 if (SpaceStore.spacesEnabled) {

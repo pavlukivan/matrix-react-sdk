@@ -43,7 +43,7 @@ import QueryMatcher from "../../../autocomplete/QueryMatcher";
 import TruncatedList from "../elements/TruncatedList";
 import EntityTile from "../rooms/EntityTile";
 import BaseAvatar from "../avatars/BaseAvatar";
-import SpaceStore from "../../../stores/SpaceStore";
+import SpaceStore from "../../../stores/spaces/SpaceStore";
 
 const AVATAR_SIZE = 30;
 
@@ -243,7 +243,6 @@ const ForwardDialog: React.FC<IProps> = ({ matrixClient: cli, event, permalinkCr
                 className="mx_textinput_icon mx_textinput_search"
                 placeholder={_t("Search for rooms or people")}
                 onSearch={setQuery}
-                autoComplete={true}
                 autoFocus={true}
             />
             <AutoHideScrollbar className="mx_ForwardList_content">
