@@ -55,12 +55,9 @@ import { ListNotificationState } from "../../../stores/notifications/ListNotific
 import IconizedContextMenu from "../context_menus/IconizedContextMenu";
 import { getKeyBindingsManager, RoomListAction } from "../../../KeyBindingsManager";
 import { replaceableComponent } from "../../../utils/replaceableComponent";
-<<<<<<< HEAD
 import SettingsStore from "../../../settings/SettingsStore";
-=======
 import { shouldShowComponent } from "../../../customisations/helpers/UIComponents";
 import { UIComponent } from "../../../settings/UIFeature";
->>>>>>> tags/v3.35.1
 
 const SHOW_N_BUTTON_HEIGHT = 28; // As defined by CSS
 const RESIZE_HANDLE_HEIGHT = 4; // As defined by CSS
