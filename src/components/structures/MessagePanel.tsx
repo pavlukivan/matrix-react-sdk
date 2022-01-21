@@ -21,13 +21,14 @@ import { EventType } from 'matrix-js-sdk/src/@types/event';
 import { MatrixEvent } from 'matrix-js-sdk/src/models/event';
 import { Relations } from "matrix-js-sdk/src/models/relations";
 import { RoomMember } from 'matrix-js-sdk/src/models/room-member';
+import { logger } from 'matrix-js-sdk/src/logger';
 
 import shouldHideEvent from '../../shouldHideEvent';
 import { wantsDateSeparator } from '../../DateUtils';
 import { MatrixClientPeg } from '../../MatrixClientPeg';
 import SettingsStore from '../../settings/SettingsStore';
 import RoomContext, { TimelineRenderingType } from "../../contexts/RoomContext";
-import { Layout } from "../../settings/Layout";
+import { Layout } from "../../settings/enums/Layout";
 import { _t } from "../../languageHandler";
 import EventTile, { haveTileForEvent, IReadReceiptProps, TileShape } from "../views/rooms/EventTile";
 import { hasText } from "../../TextForEvent";
@@ -48,8 +49,8 @@ import Spinner from "../views/elements/Spinner";
 import TileErrorBoundary from '../views/messages/TileErrorBoundary';
 import { RoomPermalinkCreator } from "../../utils/permalinks/Permalinks";
 import EditorStateTransfer from "../../utils/EditorStateTransfer";
-import { logger } from 'matrix-js-sdk/src/logger';
 import { Action } from '../../dispatcher/actions';
+import { getEventDisplayInfo } from "../../utils/EventUtils";
 
 const CONTINUATION_MAX_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const continuedTypes = [EventType.Sticker, EventType.RoomMessage];
@@ -179,11 +180,13 @@ interface IProps {
     getRelationsForEvent?(eventId: string, relationType: string, eventType: string): Relations;
 
     hideThreadedMessages?: boolean;
+    disableGrouping?: boolean;
 }
 
 interface IState {
     ghostReadMarkers: string[];
     showTypingNotifications: boolean;
+    hideSender: boolean;
 }
 
 interface IReadReceiptForUser {
@@ -197,6 +200,10 @@ interface IReadReceiptForUser {
 export default class MessagePanel extends React.Component<IProps, IState> {
     static contextType = RoomContext;
     public context!: React.ContextType<typeof RoomContext>;
+
+    static defaultProps = {
+        disableGrouping: false,
+    };
 
     // opaque readreceipt info for each userId; used by ReadReceiptMarker
     // to manage its animations
@@ -248,8 +255,6 @@ export default class MessagePanel extends React.Component<IProps, IState> {
     // A map of <callId, CallEventGrouper>
     private callEventGroupers = new Map<string, CallEventGrouper>();
 
-    private membersCount = 0;
-
     constructor(props, context) {
         super(props, context);
 
@@ -258,6 +263,7 @@ export default class MessagePanel extends React.Component<IProps, IState> {
             // display 'ghost' read markers that are animating away
             ghostReadMarkers: [],
             showTypingNotifications: SettingsStore.getValue("showTypingNotifications"),
+            hideSender: this.shouldHideSender(),
         };
 
         // Cache hidden events setting on mount since Settings is expensive to
@@ -300,8 +306,14 @@ export default class MessagePanel extends React.Component<IProps, IState> {
         }
     }
 
+    private shouldHideSender(): boolean {
+        return this.props.room?.getInvitedAndJoinedMemberCount() <= 2 && this.props.layout === Layout.Bubble;
+    }
+
     private calculateRoomMembersCount = (): void => {
-        this.membersCount = this.props.room?.getMembers().length || 0;
+        this.setState({
+            hideSender: this.shouldHideSender(),
+        });
     };
 
     private onShowTypingNotificationsChange = (): void => {
@@ -652,7 +664,7 @@ export default class MessagePanel extends React.Component<IProps, IState> {
             }
 
             for (const Grouper of groupers) {
-                if (Grouper.canStartGroup(this, mxEv)) {
+                if (Grouper.canStartGroup(this, mxEv) && !this.props.disableGrouping) {
                     grouper = new Grouper(
                         this,
                         mxEv,
@@ -715,11 +727,14 @@ export default class MessagePanel extends React.Component<IProps, IState> {
             ret.push(dateSeparator);
         }
 
-        let willWantDateSeparator = false;
         let lastInSection = true;
         if (nextEventWithTile) {
-            willWantDateSeparator = this.wantsDateSeparator(mxEv, nextEventWithTile.getDate() || new Date());
-            lastInSection = willWantDateSeparator || mxEv.getSender() !== nextEventWithTile.getSender();
+            const nextEv = nextEventWithTile;
+            const willWantDateSeparator = this.wantsDateSeparator(mxEv, nextEv.getDate() || new Date());
+            lastInSection = willWantDateSeparator ||
+                mxEv.getSender() !== nextEv.getSender() ||
+                getEventDisplayInfo(nextEv).isInfoMessage ||
+                !shouldFormContinuation(mxEv, nextEv, this.showHiddenEvents, this.context.timelineRenderingType);
         }
 
         // is this a continuation of the previous message?
@@ -787,7 +802,7 @@ export default class MessagePanel extends React.Component<IProps, IState> {
                     enableFlair={this.props.enableFlair}
                     showReadReceipts={this.props.showReadReceipts}
                     callEventGrouper={callEventGrouper}
-                    hideSender={this.membersCount <= 2 && this.props.layout === Layout.Bubble}
+                    hideSender={this.state.hideSender}
                     timelineRenderingType={this.context.timelineRenderingType}
                 />
             </TileErrorBoundary>,

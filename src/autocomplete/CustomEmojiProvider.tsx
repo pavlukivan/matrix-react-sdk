@@ -49,20 +49,28 @@ function score(query, space) {
     }
 }
 
-export default class EmojiProvider extends AutocompleteProvider {
+export default class CustomEmojiProvider extends AutocompleteProvider {
     matcher: QueryMatcher<ICustomEmojiShort>;
 
-    constructor() {
-        super(CUSTOM_EMOJI_REGEX);
+    constructor(room: Room, renderingType?: TimelineRenderingType) {
+        super({ commandRegex: CUSTOM_EMOJI_REGEX, renderingType });
         let emojis: any = MatrixClientPeg.get().getAccountData('im.ponies.user_emotes');
-        if(emojis && emojis.event) emojis = emojis.event;
-        if (emojis && emojis.content && emojis.content.emoticons) emojis = emojis.content.emoticons;
-        else emojis = {};
+        if (emojis && emojis.event) emojis = emojis.event;
+        if (emojis && emojis.content) {
+            emojis = emojis.content;
+            if (emojis.emoticons) emojis = emojis.emoticons;
+            else if (emojis.images) emojis = emojis.images;
+            else emojis = {};
+        } else {
+            emojis = {};
+        }
         let shortnames: ICustomEmojiShort[] = [];
         let i = -1;
         for (let name in emojis) {
             ++i;
-            shortnames.push({ url: ''+emojis[name].url, shortname: name, _orderBy: i });
+            let name2 = name;
+            if (!name.startsWith(':')) name2 = ':' + name2 + ':';
+            shortnames.push({ url: ''+emojis[name].url, shortname: name2, _orderBy: i });
         }
         this.matcher = new QueryMatcher<ICustomEmojiShort>(shortnames, {
             keys: ['shortname'],
@@ -82,7 +90,8 @@ export default class EmojiProvider extends AutocompleteProvider {
         }
 
         let completions = [];
-        const {command, range} = this.getCurrentCommand(query, selection);
+        const { command, range } = this.getCurrentCommand(query, selection);
+
         if (command) {
             const matchedString = command[0];
             completions = this.matcher.match(matchedString, limit);

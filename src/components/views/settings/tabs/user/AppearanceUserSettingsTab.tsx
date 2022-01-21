@@ -16,6 +16,7 @@ limitations under the License.
 */
 
 import React from 'react';
+
 import { _t } from "../../../../../languageHandler";
 import SdkConfig from "../../../../../SdkConfig";
 import { MatrixClientPeg } from '../../../../../MatrixClientPeg';
@@ -25,12 +26,12 @@ import SettingsFlag from '../../../elements/SettingsFlag';
 import Field from '../../../elements/Field';
 import { SettingLevel } from "../../../../../settings/SettingLevel";
 import { UIFeature } from "../../../../../settings/UIFeature";
-import { Layout } from "../../../../../settings/Layout";
+import { Layout } from "../../../../../settings/enums/Layout";
 import { replaceableComponent } from "../../../../../utils/replaceableComponent";
 import LayoutSwitcher from "../../LayoutSwitcher";
-
 import FontScalingPanel from '../../FontScalingPanel';
 import ThemeChoicePanel from '../../ThemeChoicePanel';
+import ImageSizePanel from "../../ImageSizePanel";
 
 interface IProps {
 }
@@ -117,12 +118,7 @@ export default class AppearanceUserSettingsTab extends React.Component<IProps, I
                 { brand },
             );
             advanced = <>
-                <SettingsFlag
-                    name="useCompactLayout"
-                    level={SettingLevel.DEVICE}
-                    useCheckbox={true}
-                    disabled={this.state.layout !== Layout.Group}
-                />
+                <SettingsFlag name="useCompactLayout" level={SettingLevel.DEVICE} useCheckbox={true} />
 
                 { !SettingsStore.getValue("feature_new_layout_switcher") ?
                     <StyledCheckbox
@@ -188,6 +184,7 @@ export default class AppearanceUserSettingsTab extends React.Component<IProps, I
                 { layoutSection }
                 <FontScalingPanel />
                 { this.renderAdvancedSection() }
+                <ImageSizePanel />
             </div>
         );
     }

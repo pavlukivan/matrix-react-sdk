@@ -17,18 +17,21 @@ limitations under the License.
 
 import React, { createRef } from 'react';
 import classNames from "classnames";
-import { EventType } from "matrix-js-sdk/src/@types/event";
+import { EventType, MsgType } from "matrix-js-sdk/src/@types/event";
 import { EventStatus, MatrixEvent } from "matrix-js-sdk/src/models/event";
 import { Relations } from "matrix-js-sdk/src/models/relations";
 import { RoomMember } from "matrix-js-sdk/src/models/room-member";
 import { Thread, ThreadEvent } from 'matrix-js-sdk/src/models/thread';
+import { logger } from "matrix-js-sdk/src/logger";
+import { NotificationCountType } from 'matrix-js-sdk/src/models/room';
+import { POLL_START_EVENT_TYPE } from "matrix-js-sdk/src/@types/polls";
 
 import ReplyChain from "../elements/ReplyChain";
 import { _t } from '../../../languageHandler';
 import { hasText } from "../../../TextForEvent";
 import * as sdk from "../../../index";
 import dis from '../../../dispatcher/dispatcher';
-import { Layout } from "../../../settings/Layout";
+import { Layout } from "../../../settings/enums/Layout";
 import { formatTime } from "../../../DateUtils";
 import { MatrixClientPeg } from '../../../MatrixClientPeg';
 import { ALL_RULE_TYPES } from "../../../mjolnir/BanList";
@@ -58,16 +61,19 @@ import ReactionsRow from '../messages/ReactionsRow';
 import { getEventDisplayInfo } from '../../../utils/EventUtils';
 import SettingsStore from "../../../settings/SettingsStore";
 import MKeyVerificationConclusion from "../messages/MKeyVerificationConclusion";
-import { dispatchShowThreadEvent } from '../../../dispatcher/dispatch-actions/threads';
+import { showThread } from '../../../dispatcher/dispatch-actions/threads';
 import { MessagePreviewStore } from '../../../stores/room-list/MessagePreviewStore';
-
-import { logger } from "matrix-js-sdk/src/logger";
 import { TimelineRenderingType } from "../../../contexts/RoomContext";
 import { MediaEventHelper } from "../../../utils/MediaEventHelper";
 import Toolbar from '../../../accessibility/Toolbar';
-import { POLL_START_EVENT_TYPE } from '../../../polls/consts';
 import { RovingAccessibleTooltipButton } from '../../../accessibility/roving/RovingAccessibleTooltipButton';
-import ThreadListContextMenu from '../context_menus/ThreadListContextMenu';
+import { RovingThreadListContextMenu } from '../context_menus/ThreadListContextMenu';
+import { ThreadNotificationState } from '../../../stores/notifications/ThreadNotificationState';
+import { RoomNotificationStateStore } from '../../../stores/notifications/RoomNotificationStateStore';
+import { NotificationStateEvents } from '../../../stores/notifications/NotificationState';
+import { NotificationColor } from '../../../stores/notifications/NotificationColor';
+import AccessibleButton from '../elements/AccessibleButton';
+import { CardContext } from '../right_panel/BaseCard';
 
 const eventTileTypes = {
     [EventType.RoomMessage]: 'messages.MessageEvent',
@@ -130,7 +136,7 @@ export function getHandlerTile(ev) {
     // not even when showing hidden events
     if (type === "m.room.message") {
         const content = ev.getContent();
-        if (content && content.msgtype === "m.key.verification.request") {
+        if (content && content.msgtype === MsgType.KeyVerificationRequest) {
             const client = MatrixClientPeg.get();
             const me = client && client.getUserId();
             if (ev.getSender() !== me && content.to !== me) {
@@ -171,6 +177,13 @@ export function getHandlerTile(ev) {
         if (WidgetType.JITSI.matches(type)) {
             return "messages.MJitsiWidgetEvent";
         }
+    }
+
+    if (
+        POLL_START_EVENT_TYPE.matches(type) &&
+        !SettingsStore.getValue("feature_polls")
+    ) {
+        return undefined;
     }
 
     if (ev.isState()) {
@@ -340,6 +353,7 @@ interface IState {
     hover: boolean;
     isQuoteExpanded?: boolean;
     thread?: Thread;
+    threadNotification?: NotificationCountType;
 }
 
 @replaceableComponent("views.rooms.EventTile")
@@ -349,6 +363,7 @@ export default class EventTile extends React.Component<IProps, IState> {
     // TODO: Types
     private tile = React.createRef<unknown>();
     private replyChain = React.createRef<ReplyChain>();
+    private threadState: ThreadNotificationState;
 
     public readonly ref = createRef<HTMLElement>();
 
@@ -436,7 +451,7 @@ export default class EventTile extends React.Component<IProps, IState> {
 
         // Check to make sure the sending state is appropriate. A null/undefined send status means
         // that the message is 'sent', so we're just double checking that it's explicitly not sent.
-        if (this.props.eventSendStatus && this.props.eventSendStatus !== 'sent') return false;
+        if (this.props.eventSendStatus && this.props.eventSendStatus !== EventStatus.SENT) return false;
 
         // If anyone has read the event besides us, we don't want to show a sent receipt.
         const receipts = this.props.readReceipts || [];
@@ -453,7 +468,7 @@ export default class EventTile extends React.Component<IProps, IState> {
 
         // Check the event send status to see if we are pending. Null/undefined status means the
         // message was sent, so check for that and 'sent' explicitly.
-        if (!this.props.eventSendStatus || this.props.eventSendStatus === 'sent') return false;
+        if (!this.props.eventSendStatus || this.props.eventSendStatus === EventStatus.SENT) return false;
 
         // Default to showing - there's no other event properties/behaviours we care about at
         // this point.
@@ -486,17 +501,55 @@ export default class EventTile extends React.Component<IProps, IState> {
         if (SettingsStore.getValue("feature_thread")) {
             this.props.mxEvent.once(ThreadEvent.Ready, this.updateThread);
             this.props.mxEvent.on(ThreadEvent.Update, this.updateThread);
+
+            if (this.thread) {
+                this.setupNotificationListener(this.thread);
+            }
         }
 
         const room = this.context.getRoom(this.props.mxEvent.getRoomId());
         room?.on(ThreadEvent.New, this.onNewThread);
     }
 
-    private updateThread = (thread) => {
+    private setupNotificationListener = (thread): void => {
+        const room = this.context.getRoom(this.props.mxEvent.getRoomId());
+        const notifications = RoomNotificationStateStore.instance.getThreadsRoomState(room);
+
+        this.threadState = notifications.getThreadRoomState(thread);
+
+        this.threadState.on(NotificationStateEvents.Update, this.onThreadStateUpdate);
+        this.onThreadStateUpdate();
+    };
+
+    private onThreadStateUpdate = (): void => {
+        let threadNotification = null;
+        switch (this.threadState?.color) {
+            case NotificationColor.Grey:
+                threadNotification = NotificationCountType.Total;
+                break;
+            case NotificationColor.Red:
+                threadNotification = NotificationCountType.Highlight;
+                break;
+        }
+
         this.setState({
-            thread,
+            threadNotification,
         });
-        this.forceUpdate();
+    };
+
+    private updateThread = (thread) => {
+        if (thread !== this.state.thread) {
+            if (this.threadState) {
+                this.threadState.off(NotificationStateEvents.Update, this.onThreadStateUpdate);
+            }
+
+            this.setupNotificationListener(thread);
+            this.setState({
+                thread,
+            });
+
+            this.forceUpdate();
+        }
     };
 
     // TODO: [REACT-WARNING] Replace with appropriate lifecycle event
@@ -534,6 +587,9 @@ export default class EventTile extends React.Component<IProps, IState> {
 
         const room = this.context.getRoom(this.props.mxEvent.getRoomId());
         room?.off(ThreadEvent.New, this.onNewThread);
+        if (this.threadState) {
+            this.threadState.off(NotificationStateEvents.Update, this.onThreadStateUpdate);
+        }
     }
 
     componentDidUpdate(prevProps, prevState, snapshot) {
@@ -616,21 +672,23 @@ export default class EventTile extends React.Component<IProps, IState> {
         }
 
         return (
-            <div
-                className="mx_ThreadInfo"
-                onClick={() => {
-                    dispatchShowThreadEvent(
-                        this.props.mxEvent,
-                    );
-                }}
-            >
-                <span className="mx_ThreadInfo_threads-amount">
-                    { _t("%(count)s reply", {
-                        count: this.thread.length,
-                    }) }
-                </span>
-                { this.renderThreadLastMessagePreview() }
-            </div>
+            <CardContext.Consumer>
+                { context =>
+                    <div
+                        className="mx_ThreadInfo"
+                        onClick={() => {
+                            showThread({ rootEvent: this.props.mxEvent, push: context.isCard });
+                        }}
+                    >
+                        <span className="mx_ThreadInfo_threads-amount">
+                            { _t("%(count)s reply", {
+                                count: this.thread.length,
+                            }) }
+                        </span>
+                        { this.renderThreadLastMessagePreview() }
+                    </div>
+                }
+            </CardContext.Consumer>
         );
     }
 
@@ -919,7 +977,7 @@ export default class EventTile extends React.Component<IProps, IState> {
         // matrix.to, but also for it to enable routing within Element when clicked.
         e.preventDefault();
         dis.dispatch({
-            action: 'view_room',
+            action: Action.ViewRoom,
             event_id: this.props.mxEvent.getId(),
             highlighted: true,
             room_id: this.props.mxEvent.getRoomId(),
@@ -990,7 +1048,7 @@ export default class EventTile extends React.Component<IProps, IState> {
         return this.props.getRelationsForEvent(eventId, "m.annotation", "m.reaction");
     };
 
-    private onReactionsCreated = (relationType, eventType) => {
+    private onReactionsCreated = (relationType: string, eventType: string) => {
         if (relationType !== "m.annotation" || eventType !== "m.reaction") {
             return;
         }
@@ -1013,6 +1071,7 @@ export default class EventTile extends React.Component<IProps, IState> {
             isBubbleMessage,
             isInfoMessage,
             isLeftAlignedBubbleMessage,
+            noBubbleEvent,
         } = getEventDisplayInfo(this.props.mxEvent);
         const { isQuoteExpanded } = this.state;
 
@@ -1064,9 +1123,10 @@ export default class EventTile extends React.Component<IProps, IState> {
             mx_EventTile_unverified: !isBubbleMessage && this.state.verified === E2EState.Warning,
             mx_EventTile_unknown: !isBubbleMessage && this.state.verified === E2EState.Unknown,
             mx_EventTile_bad: isEncryptionFailure,
-            mx_EventTile_emote: msgtype === 'm.emote',
+            mx_EventTile_emote: msgtype === MsgType.Emote,
             mx_EventTile_noSender: this.props.hideSender,
             mx_EventTile_clamp: this.props.tileShape === TileShape.ThreadPanel,
+            mx_EventTile_noBubble: noBubbleEvent,
         });
 
         // If the tile is in the Sending state, don't speak the message.
@@ -1157,6 +1217,7 @@ export default class EventTile extends React.Component<IProps, IState> {
             onFocusChange={this.onActionBarFocusChange}
             isQuoteExpanded={isQuoteExpanded}
             toggleThreadExpanded={() => this.setQuoteExpanded(!isQuoteExpanded)}
+            getRelationsForEvent={this.props.getRelationsForEvent}
         /> : undefined;
 
         const showTimestamp = this.props.mxEvent.getTs()
@@ -1184,16 +1245,16 @@ export default class EventTile extends React.Component<IProps, IState> {
             <div className="mx_EventTile_keyRequestInfo_tooltip_contents">
                 <p>
                     { this.state.previouslyRequestedKeys ?
-                        _t( 'Your key share request has been sent - please check your other sessions ' +
-                            'for key share requests.') :
-                        _t( 'Key share requests are sent to your other sessions automatically. If you ' +
-                            'rejected or dismissed the key share request on your other sessions, click ' +
-                            'here to request the keys for this session again.')
+                        _t('Your key share request has been sent - please check your other sessions ' +
+                           'for key share requests.') :
+                        _t('Key share requests are sent to your other sessions automatically. If you ' +
+                           'rejected or dismissed the key share request on your other sessions, click ' +
+                           'here to request the keys for this session again.')
                     }
                 </p>
                 <p>
-                    { _t( 'If your other sessions do not have the key for this message you will not ' +
-                            'be able to decrypt them.')
+                    { _t('If your other sessions do not have the key for this message you will not ' +
+                         'be able to decrypt them.')
                     }
                 </p>
             </div>;
@@ -1202,7 +1263,17 @@ export default class EventTile extends React.Component<IProps, IState> {
             _t(
                 '<requestLink>Re-request encryption keys</requestLink> from your other sessions.',
                 {},
-                { 'requestLink': (sub) => <a onClick={this.onRequestKeysClick}>{ sub }</a> },
+                {
+                    'requestLink': (sub) =>
+                        <AccessibleButton
+                            className="mx_EventTile_rerequestKeysCta"
+                            kind='link_inline'
+                            tabIndex={0}
+                            onClick={this.onRequestKeysClick}
+                        >
+                            { sub }
+                        </AccessibleButton>,
+                },
             );
 
         const keyRequestInfo = isEncryptionFailure && !isRedacted ?
@@ -1253,6 +1324,7 @@ export default class EventTile extends React.Component<IProps, IState> {
                     alwaysShowTimestamps={this.props.alwaysShowTimestamps || this.state.hover}
                     isQuoteExpanded={isQuoteExpanded}
                     setQuoteExpanded={this.setQuoteExpanded}
+                    getRelationsForEvent={this.props.getRelationsForEvent}
                 />) : null;
 
         switch (this.props.tileShape) {
@@ -1286,6 +1358,7 @@ export default class EventTile extends React.Component<IProps, IState> {
                             onHeightChanged={this.props.onHeightChanged}
                             tileShape={this.props.tileShape}
                             editState={this.props.editState}
+                            getRelationsForEvent={this.props.getRelationsForEvent}
                         />
                     </div>,
                 ]);
@@ -1293,6 +1366,7 @@ export default class EventTile extends React.Component<IProps, IState> {
             case TileShape.Thread: {
                 const room = this.context.getRoom(this.props.mxEvent.getRoomId());
                 return React.createElement(this.props.as || "li", {
+                    "ref": this.ref,
                     "className": classes,
                     "aria-live": ariaLive,
                     "aria-atomic": true,
@@ -1324,6 +1398,7 @@ export default class EventTile extends React.Component<IProps, IState> {
                             tileShape={this.props.tileShape}
                             editState={this.props.editState}
                             replacingEventId={this.props.replacingEventId}
+                            getRelationsForEvent={this.props.getRelationsForEvent}
                         />
                         { actionBar }
                         { timestamp }
@@ -1347,44 +1422,32 @@ export default class EventTile extends React.Component<IProps, IState> {
                         "data-shape": this.props.tileShape,
                         "data-self": isOwnEvent,
                         "data-has-reply": !!replyChain,
+                        "data-notification": this.state.threadNotification,
                         "onMouseEnter": () => this.setState({ hover: true }),
                         "onMouseLeave": () => this.setState({ hover: false }),
-
+                        "onClick": () => showThread({ rootEvent: this.props.mxEvent, push: true }),
                     }, <>
                         { sender }
                         { avatar }
                         <div
                             className={lineClasses}
-                            onClick={() => dispatchShowThreadEvent(this.props.mxEvent)}
                             key="mx_EventTile_line"
                         >
                             { linkedTimestamp }
                             { this.renderE2EPadlock() }
-                            { replyChain }
-                            <EventTileType ref={this.tile}
-                                mxEvent={this.props.mxEvent}
-                                forExport={this.props.forExport}
-                                replacingEventId={this.props.replacingEventId}
-                                editState={this.props.editState}
-                                highlights={this.props.highlights}
-                                highlightLink={this.props.highlightLink}
-                                showUrlPreview={this.props.showUrlPreview}
-                                permalinkCreator={this.props.permalinkCreator}
-                                onHeightChanged={this.props.onHeightChanged}
-                                callEventGrouper={this.props.callEventGrouper}
-                                tileShape={this.props.tileShape}
-                            />
-                            { keyRequestInfo }
+                            <div className="mx_EventTile_body">
+                                { MessagePreviewStore.instance.generatePreviewForEvent(this.props.mxEvent) }
+                            </div>
                             { this.renderThreadPanelSummary() }
                         </div>
                         <Toolbar className="mx_MessageActionBar" aria-label={_t("Message Actions")} aria-live="off">
                             <RovingAccessibleTooltipButton
                                 className="mx_MessageActionBar_maskButton mx_MessageActionBar_threadButton"
                                 title={_t("Reply in thread")}
-                                onClick={() => dispatchShowThreadEvent(this.props.mxEvent)}
+                                onClick={() => showThread({ rootEvent: this.props.mxEvent, push: true })}
                                 key="thread"
                             />
-                            <ThreadListContextMenu
+                            <RovingThreadListContextMenu
                                 mxEvent={this.props.mxEvent}
                                 permalinkCreator={this.props.permalinkCreator}
                                 onMenuToggle={this.onActionBarFocusChange}
@@ -1410,6 +1473,7 @@ export default class EventTile extends React.Component<IProps, IState> {
                             tileShape={this.props.tileShape}
                             onHeightChanged={this.props.onHeightChanged}
                             editState={this.props.editState}
+                            getRelationsForEvent={this.props.getRelationsForEvent}
                         />
                     </div>,
                     <a
@@ -1463,6 +1527,7 @@ export default class EventTile extends React.Component<IProps, IState> {
                                 permalinkCreator={this.props.permalinkCreator}
                                 onHeightChanged={this.props.onHeightChanged}
                                 callEventGrouper={this.props.callEventGrouper}
+                                getRelationsForEvent={this.props.getRelationsForEvent}
                             />
                             { keyRequestInfo }
                             { actionBar }
