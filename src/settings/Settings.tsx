@@ -271,7 +271,7 @@ export const SETTINGS: {[setting: string]: ISetting} = {
     },
     "feature_compact_theme": {
         isFeature: true,
-        displayName: "Use a compact room list view (might break some stuff)",
+        displayName: _td("Use a compact room list view (might break some stuff)"),
         supportedLevels: LEVELS_FEATURE,
         default: false,
     },

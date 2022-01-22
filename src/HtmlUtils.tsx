@@ -79,6 +79,8 @@ export const PERMITTED_URL_SCHEMES = [
     "webcal",
     "wtai",
     "xmpp",
+    "steam",
+    "mumble",
 ];
 
 const MEDIA_API_MXC_REGEX = /\/_matrix\/media\/r0\/(?:download|thumbnail)\/(.+?)\/(.+?)(?:[?/]|$)/;
@@ -211,7 +213,7 @@ const transformTags: IExtendedSanitizeOptions["transformTags"] = { // custom to 
         const height = Math.min(Number(attribs.height) || 600, 600);
         // specify width/height as max values instead of absolute ones to allow object-fit to do its thing
         // we only allow our own styles for this tag so overwrite the attribute
-        attribs.style = `max-width: ${width}px; max-height: ${height}px;`;
+        attribs.style = `max-width: ${width}px; max-height: ${height}px; width: auto`;
 
         attribs.src = mediaFromMxc(src).getThumbnailOfSourceHttp(width, height);
         return { tagName, attribs };

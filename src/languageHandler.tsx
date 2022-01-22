@@ -92,7 +92,7 @@ const translateWithFallback = (text: string, options?: object): { translated?: s
         }
         return { translated };
     } catch (err) {
-        return text;
+        return { translated: text };
     }
 };
 
